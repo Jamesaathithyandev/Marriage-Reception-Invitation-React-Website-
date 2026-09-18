@@ -43,7 +43,7 @@ export function EventsSection() {
           </div>
 
           <h2 className="font-display text-2xl sm:text-3xl md:text-4xl text-palace-green font-normal tracking-wide">
-            Reception Celebration
+            Reception
           </h2>
           <p className="font-serif italic text-xs sm:text-sm text-palace-green/70 mt-1 max-w-md mx-auto">
             "Join us for a royal evening of celebratory banquet, heartfelt toasts, music, and new beginnings."
