@@ -42,8 +42,6 @@ export const WEDDING_EVENTS = [
     motif: 'lotus-crest',
     accentColor: '#C6A66B', // Antique Gold
     isMain: true,
-    dressCode: 'Regal Celebration Banquet Attire',
-    attireDetails: 'Regal Celebration Banquet Attire',
   },
 ];
 

@@ -6,9 +6,9 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef, us
  * Plays the romantic classical wedding theme "Mast Magan".
  * Features:
  * - Immediate synchronous playback on the "Open Invitation" click
- * - Transparent fallback to online raw CDN if local file is unavailable
- * - Window-level first interaction listener as universal mobile fallback
- * - Safe volume handling for both desktop and mobile/iOS
+ * - Reliable Pause / Play toggle that stops instantly and stays stopped
+ * - Safe volume handling for desktop and mobile/iOS (no unhandled mutations)
+ * - Transparent fallback to online raw CDN if local file is missing
  * - Floating royal pill button with animated sound equalizer bars
  */
 const PRIMARY_SRC = '/assets/bg-music.mp3';
@@ -19,29 +19,42 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
   ref
 ) {
   const audioRef = useRef(null);
+  const fadeTimerRef = useRef(null);
+  const userPausedRef = useRef(false);
+
   const [playing, setPlaying] = useState(false);
   const [visible, setVisible] = useState(true);
   const [fadeIn, setFadeIn] = useState(false);
   const [needsGesture, setNeedsGesture] = useState(false);
 
-  // Safely set audio volume (catches iOS read-only restriction)
+  // Safely set audio volume (catches iOS WebKit read-only constraint)
   const safeSetVolume = (audio, vol) => {
     try {
       audio.volume = Math.min(Math.max(vol, 0), 1);
     } catch (_) {}
   };
 
-  const fadeVolumeTo = (audio, target, durationMs = 1200) => {
-    const steps = 30;
+  const clearFadeTimer = () => {
+    if (fadeTimerRef.current) {
+      clearInterval(fadeTimerRef.current);
+      fadeTimerRef.current = null;
+    }
+  };
+
+  const fadeVolumeTo = (audio, target, durationMs = 800) => {
+    clearFadeTimer();
+    const steps = 20;
     const interval = durationMs / steps;
-    let current = 0.05;
+    let current = 0.08;
     safeSetVolume(audio, current);
 
     const delta = (target - current) / steps;
-    const timer = setInterval(() => {
+    fadeTimerRef.current = setInterval(() => {
       current = Math.min(current + delta, target);
       safeSetVolume(audio, current);
-      if (current >= target) clearInterval(timer);
+      if (current >= target) {
+        clearFadeTimer();
+      }
     }, interval);
   };
 
@@ -58,7 +71,7 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
       }
       setPlaying(true);
       setNeedsGesture(false);
-      fadeVolumeTo(audio, volume, 1000);
+      fadeVolumeTo(audio, volume, 800);
       return true;
     } catch (err) {
       console.warn('Playback requires user activation:', err?.message);
@@ -71,13 +84,14 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
   // Expose start() via ref — called synchronously on "Open Invitation" click
   useImperativeHandle(ref, () => ({
     start: () => {
+      userPausedRef.current = false;
       const audio = audioRef.current;
       if (audio) {
         playAudio(audio);
       }
     },
-    toggle: () => {
-      toggle();
+    toggle: (e) => {
+      toggle(e);
     },
   }));
 
@@ -88,7 +102,14 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
     safeSetVolume(audio, volume);
     audioRef.current = audio;
 
-    // Error fallback to hosted source
+    // Direct event listeners on HTMLAudioElement keep React state 100% in sync
+    const handleAudioPlay = () => setPlaying(true);
+    const handleAudioPause = () => setPlaying(false);
+
+    audio.addEventListener('play', handleAudioPlay);
+    audio.addEventListener('pause', handleAudioPause);
+
+    // Fallback to hosted CDN if local asset fails to load
     audio.onerror = () => {
       if (audio.src !== FALLBACK_SRC) {
         console.info('Switching to fallback audio source...');
@@ -107,33 +128,57 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
     // Fade in pill smoothly after brief delay
     const pillTimer = setTimeout(() => setFadeIn(true), 200);
 
-    // Global listener: ANY user click or touch immediately starts music if paused
-    const handleGlobalTouch = () => {
+    // One-time interaction fallback: ONLY if autoplay was blocked AND user hasn't paused
+    const handleFirstUnlock = () => {
+      if (userPausedRef.current) return;
       if (audio && audio.paused) {
-        playAudio(audio);
+        playAudio(audio).then((started) => {
+          if (started) {
+            window.removeEventListener('click', handleFirstUnlock);
+            window.removeEventListener('touchstart', handleFirstUnlock);
+          }
+        });
       }
     };
 
-    window.addEventListener('click', handleGlobalTouch, { passive: true });
-    window.addEventListener('touchstart', handleGlobalTouch, { passive: true });
+    window.addEventListener('click', handleFirstUnlock, { passive: true });
+    window.addEventListener('touchstart', handleFirstUnlock, { passive: true });
 
     return () => {
       clearTimeout(pillTimer);
-      window.removeEventListener('click', handleGlobalTouch);
-      window.removeEventListener('touchstart', handleGlobalTouch);
+      clearFadeTimer();
+      window.removeEventListener('click', handleFirstUnlock);
+      window.removeEventListener('touchstart', handleFirstUnlock);
+      audio.removeEventListener('play', handleAudioPlay);
+      audio.removeEventListener('pause', handleAudioPause);
       audio.pause();
       audio.src = '';
     };
   }, [src, playAudio, volume]);
 
-  const toggle = () => {
+  const toggle = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.nativeEvent) {
+        e.nativeEvent.stopImmediatePropagation?.();
+      }
+    }
+
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (playing) {
+    clearFadeTimer();
+
+    if (!audio.paused) {
+      // User explicitly requested pause
+      userPausedRef.current = true;
       audio.pause();
       setPlaying(false);
+      setNeedsGesture(false);
     } else {
+      // User explicitly requested play
+      userPausedRef.current = false;
       playAudio(audio);
     }
   };
@@ -145,12 +190,16 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
 
   return (
     <>
-      {/* Invisible fullscreen tap overlay — active only when browser completely blocked autoplay */}
-      {needsGesture && (
+      {/* Invisible fullscreen tap overlay — active only when initial autoplay was completely blocked */}
+      {needsGesture && !userPausedRef.current && (
         <div
           className="fixed inset-0 z-[199] cursor-pointer"
-          onClick={() => playAudio()}
-          onTouchStart={() => playAudio()}
+          onClick={() => {
+            if (!userPausedRef.current) playAudio();
+          }}
+          onTouchStart={() => {
+            if (!userPausedRef.current) playAudio();
+          }}
           aria-label="Tap to enable music"
         />
       )}
@@ -159,6 +208,7 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
       {visible && (
         <div className={pillClass}>
           <button
+            type="button"
             onClick={toggle}
             className="group flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-gold/55 bg-palace-dark/90 backdrop-blur-md shadow-[0_0_18px_rgba(198,166,107,0.3)] hover:shadow-[0_0_28px_rgba(198,166,107,0.65)] hover:border-gold/90 transition-all duration-300 cursor-pointer active:scale-95 select-none"
             aria-label={playing ? 'Pause music' : 'Play music'}
@@ -184,7 +234,7 @@ export const BackgroundMusic = forwardRef(function BackgroundMusic(
 
             {/* Song Label */}
             <span className="font-caps text-[9px] sm:text-[10px] tracking-wider text-gold-champagne/80 group-hover:text-gold-champagne uppercase leading-none whitespace-nowrap">
-              {needsGesture ? 'Tap for Music' : playing ? 'Mast Magan' : 'Play Music'}
+              {needsGesture && !userPausedRef.current ? 'Tap for Music' : playing ? 'Mast Magan' : 'Play Music'}
             </span>
 
             {/* Icon */}

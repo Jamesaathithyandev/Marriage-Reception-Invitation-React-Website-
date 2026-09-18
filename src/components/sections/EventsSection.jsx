@@ -16,7 +16,6 @@ export function EventsSection() {
     time: '6:30 PM onwards',
     description:
       'A grand celebratory evening banquet with dinner, heartfelt toasts, joyful beginnings, and royal festivities.',
-    dressCode: 'Regal Celebration Banquet Attire',
   };
 
   return (
@@ -86,15 +85,6 @@ export function EventsSection() {
                   <span>Grand Celebration Banquet</span>
                   <span className="text-gold text-[8px] sm:text-[10px]">★</span>
                 </span>
-              </div>
-
-              {/* Event Dress Code Tag */}
-              <div className="mb-3.5 flex justify-center">
-                <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1 rounded-xl sm:rounded-full border border-gold/40 bg-gold/10 shadow-2xs backdrop-blur-xs text-center max-w-full">
-                  <span className="font-caps text-[8.5px] sm:text-[10px] tracking-wide sm:tracking-wider font-bold uppercase text-palace-green leading-snug">
-                    Dress Code: {reception.dressCode}
-                  </span>
-                </div>
               </div>
 
               {/* Day & Date Line */}
