@@ -38,6 +38,10 @@ export function App() {
   const handleCurtainMidpoint = useCallback(() => setRevealedMain(true), []);
   const handleCurtainComplete = useCallback(() => setStage('main'), []);
 
+  const handleStartMusic = useCallback(() => {
+    if (musicRef.current) musicRef.current.start();
+  }, []);
+
   // Loading screen completes -> go directly to royal curtain reveal
   const handleLoadingComplete = useCallback(() => {
     if (musicRef.current) musicRef.current.start();
@@ -86,7 +90,10 @@ export function App() {
 
       {/* 0. LOADING SCREEN */}
       {stage === 'loading' && (
-        <LoadingScreen onComplete={handleLoadingComplete} />
+        <LoadingScreen
+          onStartMusic={handleStartMusic}
+          onComplete={handleLoadingComplete}
+        />
       )}
 
       {/* 1. ROYAL CURTAIN ENTRANCE TRANSITION */}

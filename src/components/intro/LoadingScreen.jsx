@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-export function LoadingScreen({ onComplete }) {
+export function LoadingScreen({ onComplete, onStartMusic }) {
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);       // progress reached 100%
   const [showBtn, setShowBtn] = useState(false);  // button faded in
@@ -27,10 +27,19 @@ export function LoadingScreen({ onComplete }) {
   }, []);
 
   const handleEnter = () => {
-    if (onComplete) {
-      setFadeOut(true);
-      setTimeout(() => onComplete(), 550);
+    // 1. Immediately trigger music synchronously during the user click gesture
+    if (onStartMusic) {
+      try {
+        onStartMusic();
+      } catch (e) {
+        console.warn('Audio play trigger error:', e);
+      }
     }
+    // 2. Animate out the loading screen
+    setFadeOut(true);
+    setTimeout(() => {
+      if (onComplete) onComplete();
+    }, 550);
   };
 
   return (
